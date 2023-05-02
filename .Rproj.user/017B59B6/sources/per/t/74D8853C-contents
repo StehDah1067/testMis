@@ -1,0 +1,149 @@
+rm(list=ls()); gc(reset=TRUE);
+
+library(data.table)
+library(misseddeaths)
+#?detach(misseddeaths)
+#  remove.packages("misseddeaths", lib="~/R/win-library/4.1")
+source("../selectLoca.R")
+survY_ag = function(ag){yy = c(35,30,30); yy[ag]}
+
+upDateC61_data = function(C61){
+  set.seed(123)
+  C61[,id:=c(1:nrow(C61))]
+  C61 = C61[id %in% sample(id,5000)]
+  # setnames(C61,'Alt','agr')
+  # setnames(C61,'UICC','stage')
+  # setnames(C61,'ICD10','icd')
+  C61 = C61[,.(id,sex,icd,stage,diagage,agr,dm,dy,fm,fy,death,DCO)]
+  setDF(C61)
+  usethis::use_data(C61,overwrite = T)
+}
+
+sp = sterbeProb(neules=F)
+loca=init.locGr()$C61;
+fn='S:/OE/ZFKD/Mitarbeiter/DahmS/Immort/Immortals2022/Data/t2022lastTumors.rdata';
+lastYear=2019;sex=1; ag=1;stage='IV'
+opt = init.Opt(sex,ag,stage,lastYear) #ag=3
+z0 = selectLoca(loca,opt,fn,lastYear=2019,neules=FALSE)
+#9upDateC61_data(tt)  #https://r-pkgs.org/data.html data(C61) tt = C61
+data(C61)
+data(sp)
+#z1 = z0[0]
+#z2 = z0[1:100]
+xx = classify(z2,sp,survYears = survY_ag(opt$agnr),
+              fu_end=2019,md_cutoff = 3.0,periodWidth=1)
+classify.summary(xx)
+
+?classify.plotSurv(xx)  ##with standard error
+classify.parameter(xx)
+classify.regCoef(xx)
+names(xx$dat)
+md_locGr = function(loca,fn,lastYear){#loca=init.locGr()$C61;fn='t2019lastTumors.rdata';lastYear=2019
+  survY_ag = function(ag){yy = c(35,30,30); yy[ag]}
+  init.Res = function(){
+    newDat = function(){
+      data.table(id=0, icd='',stage='',sex=0,diagage=0,
+                 agr='',dm=0,dy=0,fm=0,fy=0,death=0,fu.age=0,
+                 fu.time=0,missedDeath=0, prob=0)
+    }
+    newCoef = function(){
+      data.table(icd='',
+                 varnames='',
+                 agr='',
+                 sex=1,stage='I',
+                 Estimate=0,
+                 'Std. Error'=0,
+                 'Pr(>|z|)'=1#,
+                 #               signi =-1
+      )
+    }
+    newParam = function(){
+      data.table(icd='',agr='',sex=1,stage='I',
+                 CondRelSurv_ne_Pop=0,
+                 scoring=0,
+                 reg_sig=0,
+                 p_reg_md=0,
+                 md_gt_cutoff=0,
+                 rs_0Increase=0,
+                 ageCut=0,
+                 survCut=0,
+                 quant=0
+      )
+    }
+    list(  regc = newCoef()[0],
+                   Dat = newDat()[0],
+                   param = newParam()[0]
+            )
+  }
+  combiRes = function(res,uu){
+    res$regc = rbind(res$regc,uu$regCoef)
+    res$Dat = rbind(res$Dat,as.data.table(uu$Dat)[missedDeath==1])
+    res$param = rbind(res$param,uu$param)
+    return(res)
+  }
+  inSex = function(zz,res,se){#zz = zz0;se =1
+    for(ag in 1:3)#ag=1
+      for(st in unique(zz$stage)){#st='Missing';lastYear=2019;
+         opt = init.Opt(sex=se,ag,stage=st,lastYear) #ag=1
+         print(paste0(loca$ICD10,' ag:',opt$agrName,', sex:',opt$sex,', stage:',opt$stage))
+         tt = zz[as.integer(diagage) %in% opt$Ag &
+                   stage == opt$stage & sex == se]
+        xx = classify(tt,sp,survYears = survY_ag(ag),fu_end=lastYear)
+        xx$regCoef$icd = loca$ICD10
+        xx$Param$runTime$icd =loca$ICD10
+        uu = list(regCoef = xx$regCoef,
+             param = xx$Param$runTime,
+              Dat = xx$dat)
+        res = combiRes(res,uu)
+      }
+    return(res)
+  }
+  z0 = selectLoca2(loca,fn)
+  sp = sterbeProb(neules=F)
+  res = init.Res()
+  for(se in loca$sex)#  se=1
+    res = inSex(z0,res,se)
+  return(res)
+}
+fn='S:/OE/ZFKD/Mitarbeiter/DahmS/Immort/Immortals2022/Data/t2022lastTumors.rdata';
+res = md_locGr(loca=init.locGr()$C61,fn,lastYear = 2019)
+
+vv1 = md_locGr(loca=init.locGr()[[1]],fn='t2019lastTumors.rdata')
+for(i in 2:length(init.locGr())){#i=2
+      vv1 = combiUu(vv1,md_locGr(loca=init.locGr()[[i]],fn='t2019lastTumors.rdata'))
+}
+save(vv1,file = '../vv1.rdata')
+save(vv,file = '../vv.rdata')
+load('vv1.rdata')
+load('vv.rdata')
+
+
+tabMd = function(dd){#d
+#  dd <- vv1$dat;
+  uu <- dd[,.(patients= .N)]
+  uu <- save(vv,file = '../vv.rdata')
+  uu <- cbind(uu,dd[death==0,.(survivals= .N)])
+  uu <- cbind(uu,dd[death==1,.(deaths= .N)])
+  uu <- cbind(uu,dd[missedDeath==1,.(missedDeaths = .N)])
+  #  bb[,sim_md:=ifelse(is.na(sim_md),0,sim_md)]
+  uu[,md_percent := ifelse(deaths > 0,	xPrint(missedDeaths*100/(deaths),2),0)]
+  return(uu)
+}
+##TO DO
+###    classify cutoff 7 % als Paramter einführen
+###    reg_sig in Param abfragen
+
+#load('../sp.rdata')
+usethis::use_data(sp)
+
+usethis::use_testthat()
+
+
+dir('../')
+load('../c61_gesamt.rdata')
+
+data(C61)
+data(sp)
+xx = classify(C61,sp,survYears = 30,fu_end=2016,md_cutoff = 4.0)
+plotSurv(xx)
+

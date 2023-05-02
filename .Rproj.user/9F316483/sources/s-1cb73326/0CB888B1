@@ -1,0 +1,26 @@
+{
+    "id": "0CB888B1",
+    "path": "~/scratch/Myfiles/Immortals2021/Immo-package/loadF.R",
+    "project_path": null,
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": true,
+    "created": 1657263060420.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "103,0",
+        "scrollLine": "32"
+    },
+    "folds": "34|22|38|2|\n39|23|49|2|\n50|24|60|2|\n61|23|68|2|\n",
+    "lastKnownWriteTime": 1657272072,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1657278754918,
+    "read_only": false,
+    "read_only_alternatives": []
+}

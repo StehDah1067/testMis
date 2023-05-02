@@ -1,0 +1,123 @@
+#  rm(list=ls()); gc(reset=TRUE);
+
+library(data.table)
+library(plyr)
+library(periodR)
+library(missedDeath)
+source("../readLoca.R")
+source("R/md_algorithm.R", encoding = 'UTF-8')
+#setwd("C:/Users/Stefan/Documents/Arbeit/Krebs/Immortals")
+upDateC61_data = function(){
+  load('../c61_gesamt.rdata')
+  set.seed(123)
+  C61[,id:=c(1:nrow(C61))]
+  C61 = C61[id %in% sample(id,20000)]
+  setnames(xx,'Alt','agr')
+  setnames(xx,'UICC','stage')
+  setnames(xx,'ICD10','icd')
+  C61 = C61[,.(id,sex,icd,stage,diagage,agr,dm,dy,fm,fy,death,DCO)]
+  usethis::use_data(C61,overwrite = T)
+
+  xx = fread('../C00.csv')
+  C00 = xx[,.(id,sex,icd,stage,diagage,agr,dm,dy,fm,fy,death,DCO)]
+  usethis::use_data(C00,overwrite = T)
+}
+upDateC61_data()
+
+setnames(xx,'Alt','agr')
+setnames(xx,'UICC','stage')
+setnames(xx,'ICD10','icd')
+
+
+md_locGr = function(loca,fn,lastYear){#loca=init.locGr()$C33;fn='t2019lastTumors.rdata'
+  data(sp)
+  survY_ag = function(ag){yy = c(35,30,30); yy[ag]}
+  newDat = function(){
+    data.table(id=0, icd='',stage='',sex=0,diagage=0,
+               agr='',dm=0,dy=0,fm=0,fy=0,death=0,fu.age=0,
+               fu.time=0,missedDeath=0, prob=0)
+  }
+  newCoef = function(){
+    data.table(icd='',
+               varnames='',
+               agr='',
+               sex=1,stage='I',
+               Estimate=0,
+               'Std. Error'=0,
+               'Pr(>|z|)'=1,
+               signi =-1
+    )
+  }
+  newParam = function(){
+    data.table(icd='',agr='',sex=1,stage='I',
+               CondRelSurv_ne_Pop=0,
+               scoring=0,
+               md_gt_7=0,
+               rs_0Increase=0,
+               ageCut=0,
+               survCut=0,
+               quant=0
+    )
+  }
+  newCoef = function(){
+    data.table(icd='', varnames='',agr='',sex=1,stage='I',
+               Estimate=0,
+               'Std. Error'=0,
+               'Pr(>|z|)'=1,
+               signi =-1
+    )
+  }
+  print(loca$ICD10)
+  z0 = selectLoca(loca,fn,lastYear=2019)
+  regc = newCoef()[0]
+  Dat = newDat()[0]
+  param = newParam()[0]
+  Agr = c('[15,55)','[55,75)', '[75,Inf)')
+  for(se in loca$sex)#  se=1
+    for(ag in 1:length(Agr)){#ag=1
+#      print(paste('ag:',ag,' se:',se))
+      tt = z0[agr==Agr[ag] & sex == se]
+      xx = classify(tt,sp,survYears = survY_ag(ag),lastYear=2016)
+      xx$regCoef[,icd :=loca$ICD10]
+      xx$Param$runTime[,icd :=loca$ICD10]
+      regc = rbind(regc,xx$regCoef)
+      param = rbind(param,xx$Param$runTime)
+      Dat = rbind(Dat,xx$dat)
+    }
+  list(regc=regc,dat=Dat,param=param)
+}
+
+uu = md_locGr(loca=init.locGr()$C00,fn='t2019lastTumors.rdata',lastYear = 2019)
+uu[varnames != 'NULL' & pval > 0.0001,.N]
+uu[varnames != 'NULL',summary(pval)]
+
+combiUu = function(vv,uu){
+  vv$regc = rbind(vv$regc,uu$regc)
+  vv$dat = rbind(vv$dat,uu$dat)
+  return(vv)
+}
+vv1 = md_locGr(loca=init.locGr()[[1]],fn='t2019lastTumors.rdata')
+for(i in 2:length(init.locGr())){#i=2
+      vv1 = combiUu(vv,md_locGr(loca=init.locGr()[[i]],fn='t2019lastTumors.rdata'))
+}
+save(vv1,file = 'vv1.rdata')
+load('vv.rdata')
+
+classify.Param(xx)
+tableOutlier(xx)
+plotSurv(xx,stage='II')
+z0 = data.table(dat)
+aa = as.character(z0$stage)
+aa = factor(ifelse(is.na(z0$stage),"Missing",as.character(z0$stage)))
+z0[,aa := factor(ifelse(is.na(z0$stage),"Missing",as.character(z0$stage)))]
+aa = factor(ifelse(z0$stage == 'Missing',NA,as.character(z0$stage)))
+z0$stage = aa
+
+#load('../sp.rdata')
+usethis::use_data(sp)
+
+usethis::use_testthat()
+
+
+dir('../')
+load('../c61_gesamt.rdata')
